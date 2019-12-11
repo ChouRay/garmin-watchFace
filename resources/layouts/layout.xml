@@ -2,10 +2,6 @@
 	
 	<label id="toplabel" x="center" y="15" font="Graphics.FONT_SMALL" color="Graphics.COLOR_WHITE" justification="Graphics.TEXT_JUSTIFY_CENTER"/>
 	
-	
-
-	
-
 	<label id="dayOfWeek1" x="25" y="50" font="Graphics.FONT_TINY" color="Graphics.COLOR_DK_GRAY"/>
 	<label id="dayOfWeek2" x="25" y="70" font="Graphics.FONT_TINY" color="Graphics.COLOR_DK_GRAY"/>
 	<label id="dayOfWeek3" x="25" y="90" font="Graphics.FONT_TINY" color="Graphics.COLOR_DK_GRAY"/>

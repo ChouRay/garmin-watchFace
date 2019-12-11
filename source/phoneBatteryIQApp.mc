@@ -17,7 +17,11 @@ class phoneBatteryIQApp extends Application.AppBase {
 
     // Return the initial view of your application here
     function getInitialView() {
-        return [ new phoneBatteryIQView() ];
+         if( Toybox.WatchUi has :WatchFaceDelegate ) {
+            return [new phoneBatteryIQView(), new AnalogDelegate()];
+        } else {
+            return [new phoneBatteryIQView()];
+        }
     }
     
     // New app settings have been received so trigger a UI update

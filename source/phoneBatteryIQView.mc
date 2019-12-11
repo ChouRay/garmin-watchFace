@@ -8,34 +8,41 @@ using Toybox.Application;
 using Toybox.Time;
 using Toybox.Time.Gregorian;
 
-class phoneBatteryIQView extends WatchUi.WatchFace {
 
-	//var prevWatchHash;
+var partialUpdatesAllowed = false;
+
+class phoneBatteryIQView extends WatchUi.WatchFace {
 	var fontSmall,fontMedium,font;
 	var selectedFont; 
+	var fullScreenRefresh;
+	var offscreenBuffer = null;
+	var dateBuffer = null;
+	var isAwake;	    
+	var screenShape;
+	var screenCenterPoint;
+	var screenWidth;
+	var screenHeight;
+
+	var topX = 115;
+	var topY = 5;
+	
+	var rightTopX = 135;
+	var rightTopY = 40;
+	
+	var hourX = 45;
+	var hourY = 11;
+	var minuteX = 150;
+	var minuteY = 80;
+
+	var leftBottomX = 110;
+	var leftBottomY = 155;
 	
     function initialize() {
         WatchFace.initialize();
         font = WatchUi.loadResource(Rez.Fonts.fntHuge);
-        
-        //fontMedium = WatchUi.loadResource(Rez.Fonts.fntMedium);
-        //fontSmall = WatchUi.loadResource(Rez.Fonts.fntSmall);
-
-		//font = WatchUi.loadResource(Rez.Fonts.hugeJannScript); // 160px
-        //fontMedium = WatchUi.loadResource(Rez.Fonts.mediumJannScript); // 36px
-        //fontSmall = WatchUi.loadResource(Rez.Fonts.smallJannScript); // 26px
-
-        //font = WatchUi.loadResource(Rez.Fonts.hugeStiffBrush); // 180px
-        //fontMedium = WatchUi.loadResource(Rez.Fonts.mediumStiffBrush); // 35px
-        //fontSmall = WatchUi.loadResource(Rez.Fonts.smallStiffBrush); // 26px
-        
-        //font = WatchUi.loadResource(Rez.Fonts.hugeKeyVirtue); // 180px
-        //fontMedium = WatchUi.loadResource(Rez.Fonts.mediumKeyVirtue); // 35px
-        //fontSmall = WatchUi.loadResource(Rez.Fonts.smallKeyVirtue); // 26px
-
-//        prevWatchHash = "";
-
-	loadFont();
+		screenShape = System.getDeviceSettings().screenShape;
+		partialUpdatesAllowed = ( Toybox.WatchUi.WatchFace has :onPartialUpdate );
+        fullScreenRefresh = true;		
     }
 	
 	function loadFont(){
@@ -66,43 +73,90 @@ class phoneBatteryIQView extends WatchUi.WatchFace {
 	}
 	
     function getSmallFont(){
-    	loadFont();
+    	//loadFont();
     	return fontSmall;
 	}
 
     // Load your resources here
     function onLayout(dc) {
-//        setLayout(Rez.Layouts.WatchFace(dc));
-        //prevWatchHash = "";
-        //System.println("onLayout");
+		System.println("*****onLayout******");
+		loadFont();
+
+		// If this device supports BufferedBitmap, allocate the buffers we use for drawing
+        if(Toybox.Graphics has :BufferedBitmap) {
+            // Allocate a full screen size buffer with a palette of only 4 colors to draw
+            // the background image of the watchface.  This is used to facilitate blanking
+            // the second hand during partial updates of the display
+            offscreenBuffer = new Graphics.BufferedBitmap({
+                :width=>dc.getWidth(),
+                :height=>dc.getHeight(),
+                :palette=> [
+                    Graphics.COLOR_DK_GRAY,
+                    Graphics.COLOR_LT_GRAY,
+                    Graphics.COLOR_BLACK,
+                    Graphics.COLOR_WHITE
+                ]
+        	});
+			// Allocate a buffer tall enough to draw the date into the full width of the
+            // screen. This buffer is also used for blanking the second hand. This full
+            // color buffer is needed because anti-aliased fonts cannot be drawn into
+            // a buffer with a reduced color palette
+            dateBuffer = new Graphics.BufferedBitmap({
+                :width=>dc.getWidth(),
+                :height=>Graphics.getFontHeight(Graphics.FONT_MEDIUM)
+            });		
+		}
+	
+		screenWidth = dc.getWidth();
+		screenHeight = dc.getHeight();
+		System.println("w:" + screenWidth);
+		System.println("h:"+screenHeight);
+
+		screenCenterPoint = [dc.getWidth()/2, dc.getHeight()/2];
+		drawHugeWatches(dc);
+		// if(ifScreen(215,180,2)){
+		// 	draw_fr230_fr235(dc);
+		// }
+		// else if(ifScreen(208,208,1)){
+		// 	draw_fr45(dc);
+		// }
+		// else if(ifScreen(260,260,1)){
+		// 	draw_fenix6(dc);
+		// }
+		// else if(ifScreen(280,280,1)){
+		// 	draw_fenix6xpro(dc);
+		// } else {
+		// 	drawHugeWatches(dc);			
+		// }
     }
 
     // Called when this View is brought to the foreground. Restore
     // the state of this View and prepare it to be shown. This includes
     // loading resources into memory.
     function onShow() {
-    	//prevWatchHash = "";
-    	//System.println("onShow");
+    	System.println("*****onShow*****");
     }
     
     // Called when this View is removed from the screen. Save the
     // state of this View here. This includes freeing resources from
     // memory.
     function onHide() {
-    //	prevWatchHash = "";
-    	//System.println("onShow");
+    	System.println("onHide");
     }
 
-    // The user has just looked at their watch. Timers and animations may be started here.
-    function onExitSleep() {
-  //  prevWatchHash = "";
-    	//System.println("onExitSleep");
-    }
-
-    // Terminate any active timers and prepare for slow updates.
+    // This method is called when the device re-enters sleep mode.
+    // Set the isAwake flag to let onUpdate know it should stop rendering the second hand.
     function onEnterSleep() {
-//    	prevWatchHash = "";
-    	//System.println("onEnterSleep");
+        isAwake = false;
+        WatchUi.requestUpdate();
+		System.println("****onEnterSleep****");
+    }
+
+    // This method is called when the device exits sleep mode.
+    // Set the isAwake flag to let onUpdate know it should render the second hand.
+    function onExitSleep() {
+        isAwake = true;
+		System.println("****onExitSleep****");
     }
 	
 	function getHours() {
@@ -152,7 +206,7 @@ class phoneBatteryIQView extends WatchUi.WatchFace {
 		}
 	}
 	
-	function drawWeekDay2(dc,x,y,offset){
+	function drawWeekDay(dc,x,y,offset){
 		var time = null;
 		if(offset==0){
 			time = Time.now();
@@ -170,376 +224,242 @@ class phoneBatteryIQView extends WatchUi.WatchFace {
 			        day.day.format("%02d")
 			        
 			    ]
-			), Graphics.TEXT_JUSTIFY_LEFT);
+		), Graphics.TEXT_JUSTIFY_LEFT);
 	}
-	
+
+	function drawBackground(dc) {
+		// var width = dc.getWidth();
+        // var height = dc.getHeight();
+
+        //If we have an offscreen buffer that has been written to
+        //draw it to the screen.
+        if( null != offscreenBuffer ) {
+            dc.drawBitmap(0, 0, offscreenBuffer);
+			//System.println("*******draw offscreenBuffer******");
+        }
+
+        // Draw the date
+        if( null != dateBuffer ) {
+            // If the date is saved in a Buffered Bitmap, just copy it from there.
+            dc.drawBitmap(0, 0, dateBuffer );			
+			//System.println("*****draw from Buffered Bitmap******");
+        } else {
+            // Otherwise, draw it from scratch.
+            drawDateString( dc);
+			//System.println("**** Otherwise, draw it from scratch*****");
+        }
+	}
+
+	function drawDateString(dc) {
+		var clockTime = System.getClockTime();
+        var minutes = clockTime.min.format("%02d").toCharArray();
+        //var notifications = System.getDeviceSettings().notificationCount;
+        var monitorInfo = ActivityMonitor.getInfo();
+        var date = Gregorian.info(Time.now(), Time.FORMAT_SHORT);
+	    var battery = Lang.format("$1$$2$",[System.getSystemStats().battery.format("%d")+"%", "battr"]);
+	    var steps = Lang.format("$1$/$2$",[monitorInfo.steps, monitorInfo.stepGoal]);
+		var calories = Lang.format("$1$$2$",[monitorInfo.calories, "kcal"]);
+	    var topLabel = Lang.format("$1$ $2$",[getMonthName(date.month),date.year]);	        
+	    var hours = getHours();
+
+		///use white draw datafield
+	    dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+	    
+	    dc.drawText(topX,topY, fontMedium, topLabel, Graphics.TEXT_JUSTIFY_CENTER);
+		
+	   	drawWeekDay(dc,rightTopX,rightTopY,0);
+	    
+	    dc.drawText(hourX,hourY, font, hours[0], Graphics.TEXT_JUSTIFY_CENTER);
+	    dc.drawText(hourX+45,hourY, font, hours[1], Graphics.TEXT_JUSTIFY_CENTER);	    
+	    
+	    dc.drawText(minuteX,minuteY, font, minutes[0], Graphics.TEXT_JUSTIFY_CENTER);
+	    dc.drawText(minuteX+45,minuteY-20, font, minutes[1], Graphics.TEXT_JUSTIFY_CENTER);
+	    
+		dc.drawText(leftBottomX+2,leftBottomY, getSmallFont(),steps,Graphics.TEXT_JUSTIFY_RIGHT);
+		dc.drawText(leftBottomX+5,leftBottomY+20, getSmallFont(),battery, Graphics.TEXT_JUSTIFY_RIGHT);
+		dc.drawText(leftBottomX+12,leftBottomY+40, getSmallFont(), calories, Graphics.TEXT_JUSTIFY_RIGHT);
+	}
+
 	function drawHugeWatches(dc){
-		var clockTime = System.getClockTime();
-        var minutes = clockTime.min.format("%02d").toCharArray();
-//        var connected = System.getDeviceSettings().phoneConnected;
-        var notifications = System.getDeviceSettings().notificationCount;
-        //var alarms = System.getDeviceSettings().alarmCount;
-        var bgColor = Application.getApp().getProperty("BackgroundColor");
-        var fgColor = Application.getApp().getProperty("ForegroundColor");
-//        var watchHash = minutes + "m" + "p" + bgColor + fgColor + notifications + useBrushFont() + showBottomLeft() + showDays();
-//    
-//    	if(!watchHash.equals(prevWatchHash)) {
-//        	prevWatchHash = watchHash+"";
-        	
-        	var date = Gregorian.info(Time.now(), Time.FORMAT_SHORT);
-	        var battery = Lang.format("$1$$2$",[System.getSystemStats().battery.format("%d")+"%", "battr"]);
-	        var steps = Lang.format("$1$/$2$",[ActivityMonitor.getInfo().steps,ActivityMonitor.getInfo().stepGoal]);
-	        var topLabel = Lang.format("$1$ $2$",[getMonthName(date.month),date.year]);	        
-	        var hours = getHours();
-        	
-        	dc.setColor(Graphics.COLOR_TRANSPARENT, bgColor);
-	    	dc.clear();
-	    	dc.setColor(fgColor, Graphics.COLOR_TRANSPARENT);
-	        
-	        var topX = 115;
-	        var topY = 5;
-			
-			var rightTopX = 135;
-	      	var rightTopY = 40;
-	      	
-			var hourX = 45;
-			var hourY = 11;
-			var minuteX = 150;
-			var minuteY = 80;
-
-	      	var leftBottomX = 110;
-	      	var leftBottomY = 155;
-	        
-//	        if(connected){
-//    			dc.drawText(115,135, fontSmall, "B", Graphics.TEXT_JUSTIFY_RIGHT);
-//	        }
-	        
-	        dc.drawText(topX,topY, fontMedium, topLabel, Graphics.TEXT_JUSTIFY_CENTER);
-	        //for(var t=1;t<=12;t++){dc.drawText(topX,topY, fontMedium, Lang.format("$1$ $2$",[getMonthName(t),date.year]), Graphics.TEXT_JUSTIFY_CENTER);}
-	        
-	        if(showDays()){
-		        drawWeekDay2(dc,rightTopX,rightTopY,0);
-		        drawWeekDay2(dc,rightTopX,rightTopY+20,1);
-		        drawWeekDay2(dc,rightTopX,rightTopY+40,2);
-	//	        drawWeekDay2(dc,rightTopX,rightTopY+60,3);
-			}
-	      	
-	        dc.drawText(hourX,hourY, font, hours[0], Graphics.TEXT_JUSTIFY_CENTER);
-	        dc.drawText(hourX+45,hourY, font, hours[1], Graphics.TEXT_JUSTIFY_CENTER);
-	        
-//	        for(var t=0;t<=2;t++){dc.drawText(hourX,hourY, font, t, Graphics.TEXT_JUSTIFY_CENTER);}
-//	    	for(var t=0;t<=9;t++){dc.drawText(hourX+45,hourY, font, t, Graphics.TEXT_JUSTIFY_CENTER);}
-	    	
-	    	dc.drawText(minuteX,minuteY, font, minutes[0], Graphics.TEXT_JUSTIFY_CENTER);
-	    	dc.drawText(minuteX+45,minuteY-20, font, minutes[1], Graphics.TEXT_JUSTIFY_CENTER);
-	    	
-//	    	for(var t=0;t<=5;t++){dc.drawText(minuteX,minuteY, font, t, Graphics.TEXT_JUSTIFY_CENTER);}
-//	    	for(var t=0;t<=9;t++){dc.drawText(minuteX+45,minuteY-20, font, t, Graphics.TEXT_JUSTIFY_CENTER);}
-
-			if(showBottomLeft()){
-		        dc.drawText(leftBottomX+2,leftBottomY, getSmallFont(),steps,Graphics.TEXT_JUSTIFY_RIGHT);
-		        dc.drawText(leftBottomX,leftBottomY+20, getSmallFont(),battery, Graphics.TEXT_JUSTIFY_RIGHT);
-		        if(notifications>0){
-		        	dc.drawText(leftBottomX+1,leftBottomY+40, getSmallFont(), notifications + " msgs", Graphics.TEXT_JUSTIFY_RIGHT);
-		        }
-	        }
-	        	
-//    	}
-	}
-	
-	function draw_fenix6(dc){
-		var clockTime = System.getClockTime();
-        var minutes = clockTime.min.format("%02d").toCharArray();
-        var notifications = System.getDeviceSettings().notificationCount;
-        var bgColor = Application.getApp().getProperty("BackgroundColor");
-        var fgColor = Application.getApp().getProperty("ForegroundColor");
-  	
-    	var date = Gregorian.info(Time.now(), Time.FORMAT_SHORT);
-        var battery = Lang.format("$1$$2$",[System.getSystemStats().battery.format("%d")+"%", "battery"]);
-        var steps = Lang.format("$1$/$2$",[ActivityMonitor.getInfo().steps,ActivityMonitor.getInfo().stepGoal]);
-        var topLabel = Lang.format("$1$ $2$",[getMonthName(date.month),date.year]);	        
-        var hours = getHours();
-    	
-    	dc.setColor(Graphics.COLOR_TRANSPARENT, bgColor);
-    	dc.clear();
-    	dc.setColor(fgColor, Graphics.COLOR_TRANSPARENT);
-        
-        var topX = 115;
-        var topY = 5;
-		
-		var rightTopX = 130;
-      	var rightTopY = 40;
-      	
-		var hourX = 45;
-		var hourY = 15;
-		var minuteX = 170;
-		var minuteY = 100;
-
-      	var leftBottomX = 135;
-      	var leftBottomY = 165;
-        
-       
-        dc.drawText(topX,topY, fontMedium, topLabel, Graphics.TEXT_JUSTIFY_CENTER);
-        //for(var t=1;t<=12;t++){dc.drawText(topX,topY, fontMedium, Lang.format("$1$ $2$",[getMonthName(t),date.year]), Graphics.TEXT_JUSTIFY_CENTER);}
-        
-        if(showDays()){
-	        drawWeekDay2(dc,rightTopX,rightTopY,0);
-	        drawWeekDay2(dc,rightTopX,rightTopY+20,1);
-	        drawWeekDay2(dc,rightTopX,rightTopY+40,2);
-	        drawWeekDay2(dc,rightTopX,rightTopY+60,3);
-		}
-      	
-        dc.drawText(hourX,hourY, font, hours[0], Graphics.TEXT_JUSTIFY_CENTER);
-        dc.drawText(hourX+45,hourY, font, hours[1], Graphics.TEXT_JUSTIFY_CENTER);
-        
-//	        for(var t=0;t<=2;t++){dc.drawText(hourX,hourY, font, t, Graphics.TEXT_JUSTIFY_CENTER);}
-//	    	for(var t=0;t<=9;t++){dc.drawText(hourX+45,hourY, font, t, Graphics.TEXT_JUSTIFY_CENTER);}
-    	
-    	dc.drawText(minuteX,minuteY, font, minutes[0], Graphics.TEXT_JUSTIFY_CENTER);
-    	dc.drawText(minuteX+45,minuteY-20, font, minutes[1], Graphics.TEXT_JUSTIFY_CENTER);
-    	
-//	    	for(var t=0;t<=5;t++){dc.drawText(minuteX,minuteY, font, t, Graphics.TEXT_JUSTIFY_CENTER);}
-//	    	for(var t=0;t<=9;t++){dc.drawText(minuteX+45,minuteY-20, font, t, Graphics.TEXT_JUSTIFY_CENTER);}
-
-		if(showBottomLeft()){
-	        dc.drawText(leftBottomX,leftBottomY, getSmallFont(),battery, Graphics.TEXT_JUSTIFY_RIGHT);
-	        
-	        dc.drawText(leftBottomX+1,leftBottomY+20, getSmallFont(), notifications + " messages", Graphics.TEXT_JUSTIFY_RIGHT);
-	        dc.drawText(leftBottomX+2,leftBottomY+40, getSmallFont(),steps,Graphics.TEXT_JUSTIFY_RIGHT);
-        }
-	}
-	
-	function draw_fenix6xpro(dc){
-		var clockTime = System.getClockTime();
-        var minutes = clockTime.min.format("%02d").toCharArray();
-        var notifications = System.getDeviceSettings().notificationCount;
-        var bgColor = Application.getApp().getProperty("BackgroundColor");
-        var fgColor = Application.getApp().getProperty("ForegroundColor");
-  	
-    	var date = Gregorian.info(Time.now(), Time.FORMAT_SHORT);
-        var battery = Lang.format("$1$$2$",[System.getSystemStats().battery.format("%d")+"%", "battery"]);
-        var steps = Lang.format("$1$/$2$",[ActivityMonitor.getInfo().steps,ActivityMonitor.getInfo().stepGoal]);
-        var topLabel = Lang.format("$1$ $2$",[getMonthName(date.month),date.year]);	        
-        var hours = getHours();
-    	
-    	dc.setColor(Graphics.COLOR_TRANSPARENT, bgColor);
-    	dc.clear();
-    	dc.setColor(fgColor, Graphics.COLOR_TRANSPARENT);
-        
-        var topX = 125;
-        var topY = 10;
-		
-		var rightTopX = 140;
-      	var rightTopY = 40;
-      	
-		var hourX = 45;
-		var hourY = 15;
-		var minuteX = 185;
-		var minuteY = 120;
-
-      	var leftBottomX = 145;
-      	var leftBottomY = 170;
-        
-       
-        dc.drawText(topX,topY, fontMedium, topLabel, Graphics.TEXT_JUSTIFY_CENTER);
-        //for(var t=1;t<=12;t++){dc.drawText(topX,topY, fontMedium, Lang.format("$1$ $2$",[getMonthName(t),date.year]), Graphics.TEXT_JUSTIFY_CENTER);}
-        
-        if(showDays()){
-	        drawWeekDay2(dc,rightTopX,rightTopY,0);
-	        drawWeekDay2(dc,rightTopX,rightTopY+20,1);
-	        drawWeekDay2(dc,rightTopX,rightTopY+40,2);
-	        drawWeekDay2(dc,rightTopX,rightTopY+60,3);
-	        drawWeekDay2(dc,rightTopX,rightTopY+80,4);
-		}
-      	
-        dc.drawText(hourX,hourY, font, hours[0], Graphics.TEXT_JUSTIFY_CENTER);
-        dc.drawText(hourX+45,hourY, font, hours[1], Graphics.TEXT_JUSTIFY_CENTER);
-        
-//	        for(var t=0;t<=2;t++){dc.drawText(hourX,hourY, font, t, Graphics.TEXT_JUSTIFY_CENTER);}
-//	    	for(var t=0;t<=9;t++){dc.drawText(hourX+45,hourY, font, t, Graphics.TEXT_JUSTIFY_CENTER);}
-    	
-    	dc.drawText(minuteX,minuteY, font, minutes[0], Graphics.TEXT_JUSTIFY_CENTER);
-    	dc.drawText(minuteX+45,minuteY-20, font, minutes[1], Graphics.TEXT_JUSTIFY_CENTER);
-    	
-//	    	for(var t=0;t<=5;t++){dc.drawText(minuteX,minuteY, font, t, Graphics.TEXT_JUSTIFY_CENTER);}
-//	    	for(var t=0;t<=9;t++){dc.drawText(minuteX+45,minuteY-20, font, t, Graphics.TEXT_JUSTIFY_CENTER);}
-
-		if(showBottomLeft()){
-	        dc.drawText(leftBottomX,leftBottomY, getSmallFont(),battery, Graphics.TEXT_JUSTIFY_RIGHT);
-	        
-	        dc.drawText(leftBottomX+1,leftBottomY+20, getSmallFont(), notifications + " messages", Graphics.TEXT_JUSTIFY_RIGHT);
-	        dc.drawText(leftBottomX+2,leftBottomY+40, getSmallFont(),steps,Graphics.TEXT_JUSTIFY_RIGHT);
-        }
+		topX = 115;
+	    topY = 5;
+		rightTopX = 135;
+	    rightTopY = 40;
+		hourX = 45;
+		hourY = 11;
+		minuteX = 150;
+		minuteY = 80;
+	    leftBottomX = 110;
+	    leftBottomY = 155;
 	}
 	
 	function draw_fr45(dc){
-		var clockTime = System.getClockTime();
-        var minutes = clockTime.min.format("%02d").toCharArray();
-        //var connected = System.getDeviceSettings().phoneConnected;
-        var notifications = System.getDeviceSettings().notificationCount;
-        //var alarms = System.getDeviceSettings().alarmCount;
-        var bgColor = Application.getApp().getProperty("BackgroundColor");
-        var fgColor = Application.getApp().getProperty("ForegroundColor");
-        	
-    	var date = Gregorian.info(Time.now(), Time.FORMAT_SHORT);
-        var battery = Lang.format("$1$$2$",[System.getSystemStats().battery.format("%d")+"%", ""]);
-        var steps = Lang.format("$1$ $2$",[ActivityMonitor.getInfo().steps,"steps"]);
-        var topLabel = Lang.format("$1$ $2$",[getMonthName(date.month),date.year]);	        
-        var hours = getHours();
-    	
-    	dc.setColor(Graphics.COLOR_TRANSPARENT, bgColor);
-    	dc.clear();
-    	dc.setColor(fgColor, Graphics.COLOR_TRANSPARENT);
-        
-        var topX = 110;
-        var topY = 5;
-		
-		var rightTopX = 118;
-      	var rightTopY = 28;
-      	
-		var hourX = 35;
-		var hourY = -2;
-		var minuteX = 120;
-		var minuteY = 70;
+		topX = 110;
+        topY = 5;	
+		rightTopX = 118;
+      	rightTopY = 28;      	
+		hourX = 35;
+		hourY = -2;
+		minuteX = 120;
+		minuteY = 70;
+      	leftBottomX = 95;
+      	leftBottomY = 135;
+	}
 
-      	var leftBottomX = 95;
-      	var leftBottomY = 135;
-        
-        dc.drawText(topX,topY, getSmallFont(), topLabel, Graphics.TEXT_JUSTIFY_CENTER);
-        //for(var t=1;t<=12;t++){dc.drawText(topX,topY, fontMedium, Lang.format("$1$ $2$",[getMonthName(t),date.year]), Graphics.TEXT_JUSTIFY_CENTER);}
-        
-        if(showDays()){
-	        drawWeekDay2(dc,rightTopX,rightTopY,0);
-	        drawWeekDay2(dc,rightTopX,rightTopY+20,1);
-	        drawWeekDay2(dc,rightTopX,rightTopY+40,2);
-        }
-//	        drawWeekDay2(dc,rightTopX,rightTopY+60,3);
-      	
-        dc.drawText(hourX,hourY, font, hours[0], Graphics.TEXT_JUSTIFY_CENTER);
-        dc.drawText(hourX+45,hourY, font, hours[1], Graphics.TEXT_JUSTIFY_CENTER);
-        
-//	        for(var t=0;t<=2;t++){dc.drawText(hourX,hourY, font, t, Graphics.TEXT_JUSTIFY_CENTER);}
-//	    	for(var t=0;t<=9;t++){dc.drawText(hourX+45,hourY, font, t, Graphics.TEXT_JUSTIFY_CENTER);}
-    	
-    	dc.drawText(minuteX,minuteY, font, minutes[0], Graphics.TEXT_JUSTIFY_CENTER);
-    	dc.drawText(minuteX+45,minuteY-20, font, minutes[1], Graphics.TEXT_JUSTIFY_CENTER);
-    	
-//	    	for(var t=0;t<=5;t++){dc.drawText(minuteX,minuteY, font, t, Graphics.TEXT_JUSTIFY_CENTER);}
-//	    	for(var t=0;t<=9;t++){dc.drawText(minuteX+45,minuteY-20, font, t, Graphics.TEXT_JUSTIFY_CENTER);}
-
-		if(showBottomLeft()){
-	        dc.drawText(leftBottomX+2,leftBottomY, getSmallFont(),steps,Graphics.TEXT_JUSTIFY_RIGHT);
-	        dc.drawText(leftBottomX+1,leftBottomY+18, getSmallFont(), notifications + " msgs", Graphics.TEXT_JUSTIFY_RIGHT);
-	        dc.drawText(leftBottomX,leftBottomY+36, getSmallFont(),battery, Graphics.TEXT_JUSTIFY_RIGHT);
-//	        if(notifications>0){
-//	        	
-//	        }
-        }
+	function draw_fenix6(dc){
+        topX = 115;
+        topY = 5;	
+		rightTopX = 130;
+      	rightTopY = 40;
+    
+		hourX = 45;
+		hourY = 15;
+		minuteX = 170;
+		minuteY = 100;
+      	leftBottomX = 135;
+      	leftBottomY = 165;
+	}
 	
+	function draw_fenix6xpro(dc){
+        topX = 125;
+        topY = 10;
+	
+		rightTopX = 140;
+      	rightTopY = 40;
+    
+		hourX = 45;
+		hourY = 15;
+		minuteX = 185;
+		minuteY = 120;
+
+      	leftBottomX = 145;
+      	leftBottomY = 170;
 	}
 	
 	function draw_fr230_fr235(dc){
-		var clockTime = System.getClockTime();
-        var minutes = clockTime.min.format("%02d").toCharArray();
-        //var connected = System.getDeviceSettings().phoneConnected;
-        var notifications = System.getDeviceSettings().notificationCount;
-        //var alarms = System.getDeviceSettings().alarmCount;
-        var bgColor = Application.getApp().getProperty("BackgroundColor");
-        var fgColor = Application.getApp().getProperty("ForegroundColor");
-//        var watchHash = minutes + "m" + "p" + bgColor + fgColor + notifications + useBrushFont() + showBottomLeft() + showDays();
-//    
-//    	if(!watchHash.equals(prevWatchHash)) {
-//        	prevWatchHash = watchHash+"";
-        	
-        	var date = Gregorian.info(Time.now(), Time.FORMAT_SHORT);
-	        var topLabel = Lang.format("$1$$2$",[getMonthName(date.month),date.year]);	        
-	        var hours = getHours();
-
-			var battery = Lang.format("$1$$2$",[System.getSystemStats().battery.format("%d")+"%", "battr"]);
-	        var steps = Lang.format("$1$ $2$",[ActivityMonitor.getInfo().steps,"steps"]);
-	        
-        	dc.setColor(Graphics.COLOR_TRANSPARENT, bgColor);
-	    	dc.clear();
-	    	dc.setColor(fgColor, Graphics.COLOR_TRANSPARENT);
-	        
-	        var topX = 110;
-	        var topY = 3;
-			
-			var rightTopX = 135;
-	      	var rightTopY = 40;
-	      	
-			var hourX = 35;
-			var hourY = -20;
-			var minuteX = 130;
-			var minuteY = 25;
-
-	      	var leftBottomX = 90;
-	      	var leftBottomY = 120;
-	       
-	        
-	        dc.drawText(topX,topY, getSmallFont(), topLabel, Graphics.TEXT_JUSTIFY_LEFT);
-	        if(showDays()){
-	        	drawWeekDay2(dc,topX,topY+16,0);
-	        	drawWeekDay2(dc,topX,topY+31,1);
-	        }
-
-	        dc.drawText(hourX,hourY, font, hours[0], Graphics.TEXT_JUSTIFY_CENTER);
-	        dc.drawText(hourX+40,hourY, font, hours[1], Graphics.TEXT_JUSTIFY_CENTER);
-
-//	        for(var t=0;t<=2;t++){dc.drawText(hourX,hourY, font, t, Graphics.TEXT_JUSTIFY_CENTER);}
-//	    	for(var t=0;t<=9;t++){dc.drawText(hourX+50,hourY, font, t, Graphics.TEXT_JUSTIFY_CENTER);}
-
-	    	dc.drawText(minuteX,minuteY, font, minutes[0], Graphics.TEXT_JUSTIFY_CENTER);
-	    	dc.drawText(minuteX+50,minuteY, font, minutes[1], Graphics.TEXT_JUSTIFY_CENTER);
-
-//	    	for(var t=0;t<=5;t++){dc.drawText(minuteX,minuteY, font, t, Graphics.TEXT_JUSTIFY_CENTER);}
-//	    	for(var t=0;t<=9;t++){dc.drawText(minuteX+50,minuteY, font, t, Graphics.TEXT_JUSTIFY_CENTER);}
-
-			if(showBottomLeft()){
-		        dc.drawText(leftBottomX,leftBottomY, getSmallFont(),battery,Graphics.TEXT_JUSTIFY_RIGHT);
-		        dc.drawText(leftBottomX,leftBottomY+16, getSmallFont(),steps,Graphics.TEXT_JUSTIFY_RIGHT);
-		        if(notifications>0){
-		        	dc.drawText(leftBottomX+10,leftBottomY+32, getSmallFont(), notifications + " msgs", Graphics.TEXT_JUSTIFY_RIGHT);
-		        }
-	        }
-
-//    	}
+		topX = 110;
+		topY = 3;
+		rightTopX = 135;
+		rightTopY = 40;
+		hourX = 35;
+		hourY = -20;
+		minuteX = 130;
+		minuteY = 25;
+		leftBottomX = 90;
+		leftBottomY = 120;		
 	}
 	
 	function ifScreen(screenWidth,screenHeight,screenShape){
 		return 
-			screenWidth == System.getDeviceSettings().screenWidth &&
-			screenHeight == System.getDeviceSettings().screenHeight &&	
-			screenShape == System.getDeviceSettings().screenShape;
+			screenWidth == screenWidth &&
+			screenHeight == screenHeight &&	
+			screenShape == screenShape;
+	}
+
+	function onPartialUpdate( dc ) {
+		// If we're not doing a full screen refresh we need to re-draw the background
+        // before drawing the updated second hand position. Note this will only re-draw
+        // the background in the area specified by the previously computed clipping region.
+		if (!fullScreenRefresh) {
+			drawBackground(dc);			
+		}
+		
+		//System.println(ActivityMonitor.HeartRateSample.heartRate);
+		//System.println(System.getClockTime().sec);
+
+		dc.setClip(rightTopX, rightTopY+20, 55, 40);
+		dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+
+		dc.drawText(rightTopX,rightTopY+20, getSmallFont(), Lang.format(
+	    	"$1$ $2$",
+		    	[
+					"hr",
+			        Activity.getActivityInfo().currentHeartRate			        
+			    ]
+		), Graphics.TEXT_JUSTIFY_LEFT);
+		dc.drawText(rightTopX,rightTopY+40, getSmallFont(), Lang.format(
+	    	"$1$",
+		    	[
+			        System.getClockTime().sec.format("%02d")			        
+			    ]
+		), Graphics.TEXT_JUSTIFY_LEFT);
 	}
 	
     // Update the view
-    function onUpdate(dc) {
-        //drawWatch(dc);
-
-		System.println(System.getDeviceSettings().screenWidth);
-		System.println(System.getDeviceSettings().screenHeight);
-		System.println(System.getDeviceSettings().screenShape);
+    function onUpdate(dc) {		
 		
-		if(ifScreen(215,180,2)){
-			draw_fr230_fr235(dc);	
-			return;
-		}
-		if(ifScreen(208,208,1)){
-			draw_fr45(dc);	
-			return;
-		}
-		if(ifScreen(260,260,1)){
-			draw_fenix6(dc);	
-			return;
-		}
-		if(ifScreen(280,280,1)){
-			draw_fenix6xpro(dc);	
-			return;
-		}
+		var targetDc = null;
 
-		drawHugeWatches(dc);
+		// We always want to refresh the full screen when we get a regular onUpdate call.
+		fullScreenRefresh = true;	
+		if(null != offscreenBuffer) {
+            dc.clearClip();
+            // If we have an offscreen buffer that we are using to draw the background,
+            // set the draw context of that buffer as our target.
+            targetDc = offscreenBuffer.getDc();
+        } else {
+            targetDc = dc;
+        }	
+
+		// Fill the entire background with Black.
+		targetDc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_WHITE);
+        targetDc.fillRectangle(0, 0, dc.getWidth(), dc.getHeight());
+
+        // If we have an offscreen buffer that we are using for the date string,
+        // Draw the date into it. If we do not, the date will get drawn every update
+        // after blanking the second hand.
+        if( null != dateBuffer ) {
+            var dateDc = dateBuffer.getDc();
+
+            //Draw the background image buffer into the date buffer to set the background
+            dateDc.drawBitmap(0, 0, offscreenBuffer);
+
+            //Draw the date string into the buffer.
+            drawDateString( dateDc);
+			//System.println("######Draw dateBuffer********");
+        }
+		// Output the offscreen buffers to the main display if required.
+        drawBackground(dc);
+
+		drawDateString(dc);
+
+		if( partialUpdatesAllowed ) {
+            // If this device supports partial updates and they are currently
+            // allowed run the onPartialUpdate method to draw the second hand.
+            onPartialUpdate( dc );	
+        } else if (isAwake) {
+			/////? test test
+			// Otherwise, if we are out of sleep mode, draw the second hr
+            // directly in the full update method.			
+			dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+			dc.drawText(rightTopX,rightTopY+20, getSmallFont(), Lang.format(
+	    	"$1$ $2$",
+		    	[
+					"hr",
+			        Activity.getActivityInfo().currentHeartRate			        
+			    ]
+			), Graphics.TEXT_JUSTIFY_LEFT);
+			dc.drawText(rightTopX,rightTopY+40, getSmallFont(), Lang.format(
+	    		"$1$",
+		    		[
+				        System.getClockTime().sec.format("%02d")			        
+				    ]
+			), Graphics.TEXT_JUSTIFY_LEFT);
+		}
 		
+		fullScreenRefresh = false;		
     }
+}
 
+class AnalogDelegate extends WatchUi.WatchFaceDelegate {
+    // The onPowerBudgetExceeded callback is called by the system if the
+    // onPartialUpdate method exceeds the allowed power budget. If this occurs,
+    // the system will stop invoking onPartialUpdate each second, so we set the
+    // partialUpdatesAllowed flag here to let the rendering methods know they
+    // should not be rendering a second hand.
+    function onPowerBudgetExceeded(powerInfo) {
+        System.println( "Average execution time: " + powerInfo.executionTimeAverage );
+        System.println( "Allowed execution time: " + powerInfo.executionTimeLimit );
+        partialUpdatesAllowed = false;
+    }
 }
